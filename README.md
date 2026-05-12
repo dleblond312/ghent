@@ -109,6 +109,27 @@ Requires [WiX 7 CLI](https://wixtoolset.org/) (`wix` on PATH) and Node 22 portab
 
 ---
 
+## Releasing
+
+Pushing a `v*` tag triggers the **Release** workflow (`.github/workflows/release.yml`) which builds and publishes a GitHub Release with two artifacts:
+
+| Artifact | Contents |
+|---|---|
+| `Ghent-<version>.msi` | Windows installer (Node runtime + bundle + scheduled task) |
+| `ghent-bundle.zip` | Portable bundle (server.cjs + node_modules + assets) |
+
+```powershell
+# Tag and push to trigger a release
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+The workflow runs on `windows-latest` and performs: `npm ci` → typecheck → bundle → zip → MSI build → publish. Release notes are auto-generated from commits since the previous tag.
+
+Releases appear at https://github.com/dleblond312/ghent/releases.
+
+---
+
 ## Deploy (dev → installed)
 
 ```powershell
