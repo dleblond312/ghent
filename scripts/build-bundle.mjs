@@ -28,7 +28,8 @@ await build({
   format: 'cjs',
   outfile: join(outDir, 'server.cjs'),
   // node-notifier dynamically resolves vendor binaries; bundling breaks that.
-  external: ['node-notifier'],
+  // systray2 ships a pre-compiled Go binary (traybin/); same issue.
+  external: ['node-notifier', 'systray2'],
   logLevel: 'info',
   treeShaking: true
 });
@@ -41,7 +42,8 @@ writeFileSync(stubPkgPath, JSON.stringify({
   version: '0.0.0',
   private: true,
   dependencies: {
-    'node-notifier': '^10.0.1'
+    'node-notifier': '^10.0.1',
+    'systray2': '^2.1.4'
   }
 }, null, 2));
 
@@ -62,10 +64,10 @@ const snoreDir = join(outDir, 'snoretoast');
 mkdirSync(snoreDir, { recursive: true });
 copyFileSync(snoreSrc, join(snoreDir, 'snoretoast-x64.exe'));
 
-// 4. Copy src/assets/ (icon.png + icon.svg) next to the bundle.
+// 4. Copy src/assets/ (icon.png + icon.svg + icon.ico) next to the bundle.
 const assetsDir = join(outDir, 'assets');
 mkdirSync(assetsDir, { recursive: true });
-for (const name of ['icon.png', 'icon.svg']) {
+for (const name of ['icon.png', 'icon.svg', 'icon.ico']) {
   const src = join(projectRoot, 'src', 'assets', name);
   if (existsSync(src)) copyFileSync(src, join(assetsDir, name));
 }

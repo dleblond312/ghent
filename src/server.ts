@@ -1,16 +1,17 @@
 // Express server — serves the web config UI and handles GHE webhooks.
 import express, { type Request, type Response } from 'express';
 import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { notify } from './notifier.js';
 import { logEvent, patchConsole } from './logger.js';
 import { config, reloadConfig, appDataDir, type AccountConfig } from './config.js';
 import { startPolling, stopPolling, getPollerStatus } from './poller.js';
+import { startTray, stopTray } from './tray.js';
 import { UI_HTML } from './ui.js';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 
 // ── Startup side effects (only when this file is the entry point) ─────────
 const _isEntryPoint = process.argv[1]?.replace(/\\/g, '/').endsWith('server.ts')
@@ -496,22 +497,21 @@ if (_isEntryPoint) {
     if (MODE === 'webhook') console.log(`[webhook] endpoint: http://localhost:${PORT}/webhook`);
     logEvent({ kind: 'startup', version: VERSION, mode: MODE, port: PORT, accounts: config.accounts.map(a => a.id) });
 
-    // Auto-open the config UI in the default browser on startup.
-    // Skip when running as a scheduled task (non-interactive / no console window).
-    if (process.stdout.isTTY) {
-      import('node:child_process').then(({ exec }) => {
-        exec(`start "" "${url}"`, (err) => {
-          if (err) console.log('[server] Could not auto-open browser. Please open the URL above manually.');
-        });
-      });
-    }
+    // Start the system tray icon.  The tray's "Exit" item triggers gracefulShutdown.
+    startTray(PORT, gracefulShutdown);
   });
 
   server.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
-      console.error(`[server] port ${PORT} already in use — is another instance running? Check Task Scheduler or kill PID with: Get-NetTCPConnection -LocalPort ${PORT} | Select-Object OwningProcess`);
-      logEvent({ kind: 'startup_error', error: `EADDRINUSE: port ${PORT}` });
-      process.exit(1);
+      // Another instance is already running.  Open the config page in the
+      // browser so clicking the Start Menu entry still does the right thing,
+      // then exit cleanly (no crash, no duplicate tray icon).
+      console.log(`[server] port ${PORT} already in use — redirecting to existing instance`);
+      logEvent({ kind: 'startup_redirect', port: PORT });
+      spawn('cmd.exe', ['/c', 'start', '', `http://localhost:${PORT}/`], {
+        detached: true, stdio: 'ignore', windowsHide: true,
+      }).unref();
+      process.exit(0);
     }
     console.error('[server] listen error:', err.message);
     process.exit(1);
@@ -520,6 +520,7 @@ if (_isEntryPoint) {
   function gracefulShutdown(signal: string): void {
     console.log(`[server] ${signal} — stopping pollers and closing HTTP server`);
     logEvent({ kind: 'shutdown', signal });
+    stopTray();
     stopPolling();
     server.close(() => {
       console.log('[server] clean shutdown');

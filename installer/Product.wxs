@@ -44,11 +44,16 @@
     <!-- Start Menu shortcut placed directly in ProgramMenuFolder (no subfolder) -->
     <StandardDirectory Id="ProgramMenuFolder">
       <Component Id="StartMenuShortcut" Guid="*">
+        <!-- Use wscript.exe + open-ui.vbs so clicking the shortcut:
+             (a) starts the service + tray if not already running, and
+             (b) opens the config page in the default browser.
+             This matches the behaviour of the AUMID shortcut created by
+             register-aumid.ps1 and avoids flashing a console window. -->
         <Shortcut Id="StartMenuShortcutGhent"
                   Name="Ghent"
                   Description="GHE Pull Request Notifier"
-                  Target="[INSTALLFOLDER]node.exe"
-                  Arguments="&quot;[INSTALLFOLDER]server.cjs&quot;"
+                  Target="[SystemFolder]wscript.exe"
+                  Arguments="&quot;[INSTALLFOLDER]scripts\open-ui.vbs&quot;"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="GhentIcon" />
         <!-- WiX requires a KeyPath registry value when creating shortcuts

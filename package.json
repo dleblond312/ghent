@@ -1,6 +1,6 @@
 {
   "name": "ghent",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "license": "MIT",
   "description": "Ghent (GHE Notifications) — Windows toast notifier for GitHub Enterprise PR activity.",
   "type": "module",
@@ -28,7 +28,8 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "node-notifier": "^10.0.1"
+    "node-notifier": "^10.0.1",
+    "systray2": "^2.1.4"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
