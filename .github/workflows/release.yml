@@ -20,8 +20,6 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      WIX_EULA_ACCEPT: 'YES'
     steps:
       - uses: actions/checkout@v4
 
@@ -46,7 +44,10 @@ jobs:
         shell: pwsh
 
       - name: Install WiX toolset
-        run: dotnet tool install --global wix
+        run: |
+          dotnet tool install --global wix
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          wix eula accept wix7
 
       - name: Extract version from tag
         id: version
