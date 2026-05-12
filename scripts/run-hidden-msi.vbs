@@ -2,6 +2,9 @@
 ' Runs the bundled node.exe with server.cjs, logs to %LOCALAPPDATA%\Ghent\task.log.
 ' Resolves its own install root from WScript.ScriptFullName so the MSI doesn't
 ' need to bake in any paths.
+' VBScript stays here because the installed task needs a hidden launcher that
+' can resolve its install root at runtime without an extra EXE or shell wrapper.
+' WScript gives us that on every supported Windows install.
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh  = CreateObject("WScript.Shell")
 
@@ -36,5 +39,5 @@ End If
 ' Quote each argument explicitly to survive paths with spaces (Program Files).
 cmd = "cmd /c """"" & nodeExe & """ """ & serverCjs & """ >> """ & logFile & """ 2>&1"""
 
-' 0 = hidden window, False = don't wait
+'' 0 = hidden window, False = don't wait
 sh.Run cmd, 0, False

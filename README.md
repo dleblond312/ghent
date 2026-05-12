@@ -187,16 +187,16 @@ Suppressed toasts (per-PR cooldown) are logged with `"suppressed":true` so no ac
 
 | Symptom | Fix |
 |---|---|
-| Toast doesn't appear | Open Settings → Notifications → find **SnoreToast** → turn On. Windows defaults it off on first run. |
-| `npm run test-toast` prints `DisabledForUser` | Same as above. |
-| Server won't start — port 9420 in use | Another instance is running: `Get-NetTCPConnection -LocalPort 9420 \| Select-Object OwningProcess` |
-| No notifications for a PR | Check `events.jsonl` — if events appear with `"suppressed":true`, the per-PR cooldown is active. |
-| Poll never runs | Check `task.log` for errors. Common: gh CLI not authenticated (`gh auth login --hostname <host>`). |
-| Config lost after save | Check `task.log` for `[config] could not read existing config` warnings — indicates corrupt config.json. |
-| Lots of noise from old comments | Delete `%LOCALAPPDATA%\Ghent\poller-state.json` — next run reseeds without toasting. |
+| Toast doesn't appear | Open Windows Settings → System → Notifications and make sure notifications are enabled for **Ghent**. The toast is registered under the Ghent app identity, not SnoreToast. |
+| `npm run test-toast` prints `DisabledForUser` | Same as above - Windows has notifications disabled for Ghent. |
+| Server won't start - port 9420 in use | Another Ghent instance is running: `Get-NetTCPConnection -LocalPort 9420 \| Select-Object OwningProcess`. Stop the scheduled task or dev server, then retry. |
+| No notifications for a PR | Check `events.jsonl` - if events appear with `"suppressed":true`, the per-PR cooldown is active for that account/PR. |
+| Poll never runs | Check `task.log` for errors. Common causes: the relevant account is not authenticated with `gh auth login --hostname <host>`, or that account is disabled in the UI. |
+| Config lost after save | Check `task.log` for `[config] could not read existing config` warnings - that usually means a malformed `%LOCALAPPDATA%\Ghent\config.json`. |
+| Lots of noise from old comments | Delete `%LOCALAPPDATA%\Ghent\poller-state-<accountId>.json` for the affected account (or the legacy `poller-state.json` on an older install) - the next run reseeds without toasting. |
 | GHE shows webhook delivery failing with 401 | *(webhook mode)* `webhookSecret` in config doesn't match what was registered. Re-run `npm run register`. |
-| GHE delivery times out | *(webhook mode)* Tunnel is down or port doesn't match `devtunnel host -p`. |
-| GHE rejects hook creation with 404 | *(webhook mode)* Token is missing `admin:repo_hook` scope, or you don't have admin on that repo. |
+| Webhook delivery times out | *(webhook mode)* The tunnel is down, or the public URL no longer matches the local port. Restart DevTunnel and re-register the hook. |
+| Hook creation fails with 404 | *(webhook mode)* The token is missing `admin:repo_hook` scope, or you do not have admin on that repository. |
 
 ---
 
