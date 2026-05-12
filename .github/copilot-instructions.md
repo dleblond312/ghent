@@ -10,6 +10,8 @@ Windows desktop notifier for GitHub Enterprise PR activity. Polls the GHE REST A
 npm run start          # run server directly via tsx
 npm run dev            # start via Windows Task Scheduler (task must exist)
 npm run typecheck      # tsc --noEmit — the primary lint/check step
+npm test               # vitest unit + integration tests
+npm run test:coverage  # vitest with v8 coverage report
 npm run build          # tsc — emits to dist/
 npm run bundle         # esbuild single-file CJS bundle → build/bundle/server.cjs
 npm run msi            # WiX 7 MSI installer → dist/Ghent-<version>.msi
@@ -17,10 +19,11 @@ npm run deploy         # bundle + copy to "C:\Program Files\Ghent\" + bounce tas
 npm run test-toast     # smoke test: fires a test Windows toast notification
 ```
 
-There is no test suite. The verification chain after changes to `src/` is:
+The verification chain after changes to `src/` is:
 
 ```powershell
 npx tsc --noEmit       # must exit 0
+npm test               # must exit 0
 npm run bundle         # must produce build/bundle/server.cjs
 ```
 

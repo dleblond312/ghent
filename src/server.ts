@@ -10,21 +10,27 @@ import { config, reloadConfig, appDataDir, type AccountConfig } from './config.j
 import { startPolling, stopPolling, getPollerStatus } from './poller.js';
 import { UI_HTML } from './ui.js';
 
-// Timestamps on every log line from the start.
-patchConsole();
+export const VERSION = '0.2.0';
 
-const VERSION = '0.2.0';
-const PORT = config.port;
-const MODE = config.mode;
+// ── Startup side effects (only when this file is the entry point) ─────────
+const _isEntryPoint = process.argv[1]?.replace(/\\/g, '/').endsWith('server.ts')
+  || process.argv[1]?.replace(/\\/g, '/').endsWith('server.cjs')
+  || process.argv[1]?.replace(/\\/g, '/').endsWith('server.js');
 
-// Start a poller for every enabled configured account.
-if (MODE === 'poll') {
-  for (const account of config.accounts) {
-    if (account.enabled !== false) startPolling(account);
+if (_isEntryPoint) {
+  // Timestamps on every log line from the start.
+  patchConsole();
+
+  const MODE = config.mode;
+  // Start a poller for every enabled configured account.
+  if (MODE === 'poll') {
+    for (const account of config.accounts) {
+      if (account.enabled !== false) startPolling(account);
+    }
+  } else if (MODE === 'webhook' && !config.webhookSecret) {
+    console.error('webhookSecret is required in webhook mode. See config README.txt.');
+    process.exit(1);
   }
-} else if (MODE === 'webhook' && !config.webhookSecret) {
-  console.error('webhookSecret is required in webhook mode. See config README.txt.');
-  process.exit(1);
 }
 
 interface GheUser { login: string }
@@ -58,7 +64,7 @@ interface Classified {
   url: string;
 }
 
-const app = express();
+export const app = express();
 
 // Security headers — minimal but covers XSS/MIME-sniff/frame basics.
 app.use((_req: Request, res: Response, next) => {
@@ -148,7 +154,7 @@ app.post('/api/config', (req: Request, res: Response) => {
 
 // Derive the REST API base for a given hostname.
 // github.com uses api.github.com; GHE uses <host>/api/v3.
-function hostToApiBase(hostname: string): string {
+export function hostToApiBase(hostname: string): string {
   return hostname === 'github.com'
     ? 'https://api.github.com'
     : `https://${hostname}/api/v3`;
@@ -174,7 +180,7 @@ function listGhAccounts(): Array<{ hostname: string; username: string; apiBase: 
   }
 }
 
-function parseGhAuthStatus(text: string): Array<{ hostname: string; username: string; apiBase: string }> {
+export function parseGhAuthStatus(text: string): Array<{ hostname: string; username: string; apiBase: string }> {
   const results: Array<{ hostname: string; username: string; apiBase: string }> = [];
   let currentHost = '';
   for (const raw of text.split('\n')) {
@@ -324,7 +330,7 @@ app.get('/api/status', (_req: Request, res: Response) => {
 });
 
 app.get('/health', (_req: Request, res: Response) => {
-  res.json({ ok: true, mode: MODE, accounts: config.accounts.length });
+  res.json({ ok: true, mode: config.mode, accounts: config.accounts.length });
 });
 
 app.post('/api/test-notification', (_req: Request, res: Response) => {
@@ -335,7 +341,7 @@ app.post('/api/test-notification', (_req: Request, res: Response) => {
       message: account
         ? `Test notification - watching ${account.id} as ${account.username}`
         : 'Test notification - no accounts configured yet',
-      url: `http://localhost:${PORT}/`,
+      url: `http://localhost:${config.port}/`,
     });
     res.json({ ok: true });
   } catch (err: unknown) {
@@ -370,7 +376,7 @@ app.post('/webhook', (req: Request, res: Response) => {
   setImmediate(() => handleEvent(event, payload, delivery));
 });
 
-function verifySignature(rawBody: Buffer, signature: string, secret: string): boolean {
+export function verifySignature(rawBody: Buffer, signature: string, secret: string): boolean {
   if (!signature.startsWith('sha256=')) return false;
   const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
   const a = Buffer.from(signature);
@@ -463,62 +469,67 @@ function handleEvent(event: string, payload: WebhookPayload, delivery: string): 
   }
 }
 
-// ── Process robustness ────────────────────────────────────────────────────
+// ── Process robustness & server bind (entry point only) ───────────────────
 
-process.on('uncaughtException', (err) => {
-  console.error('[fatal] uncaughtException:', err.message, err.stack);
-  logEvent({ kind: 'fatal', error: err.message, stack: err.stack });
-  process.exit(1);
-});
+if (_isEntryPoint) {
+  const PORT = config.port;
+  const MODE = config.mode;
 
-process.on('unhandledRejection', (reason) => {
-  const msg = reason instanceof Error ? reason.message : String(reason);
-  console.error('[fatal] unhandledRejection:', msg);
-  logEvent({ kind: 'fatal', error: msg });
-  // Don't exit — unhandled rejections from poller ticks shouldn't kill the server.
-});
-
-// Always bind — serves the web UI in all modes, including unconfigured.
-const server = app.listen(PORT, '127.0.0.1', () => {
-  const url = `http://localhost:${PORT}/`;
-  console.log(`[server] Ghent v${VERSION} - UI at ${url}`);
-  console.log(`[server] mode=${MODE} accounts=${config.accounts.length} dataDir=${config.dataDir}`);
-  if (MODE === 'webhook') console.log(`[webhook] endpoint: http://localhost:${PORT}/webhook`);
-  logEvent({ kind: 'startup', version: VERSION, mode: MODE, port: PORT, accounts: config.accounts.map(a => a.id) });
-
-  // Auto-open the config UI in the default browser on startup.
-  // Skip when running as a scheduled task (non-interactive / no console window).
-  if (process.stdout.isTTY) {
-    import('node:child_process').then(({ exec }) => {
-      exec(`start "" "${url}"`, (err) => {
-        if (err) console.log('[server] Could not auto-open browser. Please open the URL above manually.');
-      });
-    });
-  }
-});
-
-server.on('error', (err: NodeJS.ErrnoException) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`[server] port ${PORT} already in use — is another instance running? Check Task Scheduler or kill PID with: Get-NetTCPConnection -LocalPort ${PORT} | Select-Object OwningProcess`);
-    logEvent({ kind: 'startup_error', error: `EADDRINUSE: port ${PORT}` });
+  process.on('uncaughtException', (err) => {
+    console.error('[fatal] uncaughtException:', err.message, err.stack);
+    logEvent({ kind: 'fatal', error: err.message, stack: err.stack });
     process.exit(1);
-  }
-  console.error('[server] listen error:', err.message);
-  process.exit(1);
-});
-
-function gracefulShutdown(signal: string): void {
-  console.log(`[server] ${signal} — stopping pollers and closing HTTP server`);
-  logEvent({ kind: 'shutdown', signal });
-  stopPolling();
-  server.close(() => {
-    console.log('[server] clean shutdown');
-    process.exit(0);
   });
-  // Force exit if close takes too long.
-  setTimeout(() => { console.error('[server] shutdown timeout — forcing exit'); process.exit(1); }, 8000).unref();
-}
 
-process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.once('SIGINT',  () => gracefulShutdown('SIGINT'));
+  process.on('unhandledRejection', (reason) => {
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    console.error('[fatal] unhandledRejection:', msg);
+    logEvent({ kind: 'fatal', error: msg });
+    // Don't exit — unhandled rejections from poller ticks shouldn't kill the server.
+  });
+
+  // Always bind — serves the web UI in all modes, including unconfigured.
+  const server = app.listen(PORT, '127.0.0.1', () => {
+    const url = `http://localhost:${PORT}/`;
+    console.log(`[server] Ghent v${VERSION} - UI at ${url}`);
+    console.log(`[server] mode=${MODE} accounts=${config.accounts.length} dataDir=${config.dataDir}`);
+    if (MODE === 'webhook') console.log(`[webhook] endpoint: http://localhost:${PORT}/webhook`);
+    logEvent({ kind: 'startup', version: VERSION, mode: MODE, port: PORT, accounts: config.accounts.map(a => a.id) });
+
+    // Auto-open the config UI in the default browser on startup.
+    // Skip when running as a scheduled task (non-interactive / no console window).
+    if (process.stdout.isTTY) {
+      import('node:child_process').then(({ exec }) => {
+        exec(`start "" "${url}"`, (err) => {
+          if (err) console.log('[server] Could not auto-open browser. Please open the URL above manually.');
+        });
+      });
+    }
+  });
+
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`[server] port ${PORT} already in use — is another instance running? Check Task Scheduler or kill PID with: Get-NetTCPConnection -LocalPort ${PORT} | Select-Object OwningProcess`);
+      logEvent({ kind: 'startup_error', error: `EADDRINUSE: port ${PORT}` });
+      process.exit(1);
+    }
+    console.error('[server] listen error:', err.message);
+    process.exit(1);
+  });
+
+  function gracefulShutdown(signal: string): void {
+    console.log(`[server] ${signal} — stopping pollers and closing HTTP server`);
+    logEvent({ kind: 'shutdown', signal });
+    stopPolling();
+    server.close(() => {
+      console.log('[server] clean shutdown');
+      process.exit(0);
+    });
+    // Force exit if close takes too long.
+    setTimeout(() => { console.error('[server] shutdown timeout — forcing exit'); process.exit(1); }, 8000).unref();
+  }
+
+  process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.once('SIGINT',  () => gracefulShutdown('SIGINT'));
+}
 

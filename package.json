@@ -18,6 +18,9 @@
     "list-hooks": "tsx src/register-webhook.ts --list",
     "discover-repos": "tsx src/discover-repos.ts",
     "test-toast": "tsx src/notifier.ts --test",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "bundle": "node scripts/build-bundle.mjs",
     "msi": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-msi.ps1",
     "deploy": "npm run bundle && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-local.ps1"
@@ -31,9 +34,13 @@
     "@types/express": "^4.17.21",
     "@types/node": "^20.12.7",
     "@types/node-notifier": "^8.0.5",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.6",
     "esbuild": "^0.21.5",
     "sharp": "^0.34.5",
+    "supertest": "^7.2.2",
     "tsx": "^4.7.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.6"
   }
 }

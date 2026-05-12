@@ -12,7 +12,7 @@ This constitution defines the minimum engineering bar for changes to this reposi
 
 - Ghent is developed in the open and must be safe to publish in full.
 - The codebase is TypeScript-first, bundles to a single Node-based server, and runs as a Windows scheduled task or webhook receiver.
-- Verification is local-first. There is no permanent automated test suite today, so each change must carry direct evidence appropriate to its risk.
+- Verification is local-first. The automated test suite (`npm test`) is the first line of defense; each change must carry direct evidence appropriate to its risk.
 - Public documentation and repository history are part of the product surface. Repo instructions must match what actually exists here.
 
 ---
@@ -77,7 +77,10 @@ These are active review lenses for the current codebase. They are not generic po
   Verified: review of auth and poll error paths. Gap: stronger user-visible signaling is still desirable.
 
 - **`[HC-GHENT-RATE-HEADROOM]` Polling logic must preserve rate-limit headroom.** Changes to the per-poll request pattern must keep the call model aligned with `minSafeIntervalSec()` and related constants. The probe: *"if more accounts or repositories are added, does polling remain comfortably under rate limits?"*
-  Verified: code review of request-count assumptions when poller behavior changes.
+  Verified: code review of request-count assumptions when poller behavior changes; `npm test` covers rate-limit floor calculations.
+
+- **`[HC-GHENT-TEST-COVERAGE]` Critical paths must have automated test coverage.** Changes to config loading, webhook classify, signature verification, GHE client retry/pagination, poller state management, or notification formatting must be exercised by `npm test`. The probe: *"would a regression in this code path be caught before shipping?"*
+  Verified: `npm test` must pass; new logic paths should have corresponding test cases.
 
 ---
 
@@ -134,12 +137,14 @@ Run the applicable steps for the touched scope. For changes under `src/`, the de
 
 ```powershell
 npm run typecheck
+npm test
 npm run bundle
 ```
 
 1. `npm run typecheck` must exit 0.
-2. `npm run bundle` must produce `build/bundle/server.cjs` without error.
-3. If `src/poller.ts` changed, `grep -c "paginateSearch" src/poller.ts` must be greater than or equal to 3.
-4. If the UI or notifier changed, run `npm run test-toast` or capture equivalent manual evidence when practical.
+2. `npm test` must exit 0 (vitest unit + integration tests).
+3. `npm run bundle` must produce `build/bundle/server.cjs` without error.
+4. If `src/poller.ts` changed, `grep -c "paginateSearch" src/poller.ts` must be greater than or equal to 3.
+5. If the UI or notifier changed, run `npm run test-toast` or capture equivalent manual evidence when practical.
 
 No commit is implied by verification. Human review remains required before shipping constitution changes.
