@@ -160,7 +160,7 @@ export function loadConfig(): Config {
   const isConfigured = accounts.length > 0;
   if (!isConfigured) {
     const path = writeTemplateIfMissing();
-    console.log(`[config] Welcome to Ghent! Add a GHE account to get started.`);
+    console.log(`[config] Welcome to Ghent! Add a GitHub account to get started.`);
   }
 
   const here = dirname(resolve(process.argv[1] || process.cwd()));
