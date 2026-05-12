@@ -11,7 +11,7 @@ import { startPolling, stopPolling, getPollerStatus } from './poller.js';
 import { startTray, stopTray } from './tray.js';
 import { UI_HTML } from './ui.js';
 
-export const VERSION = '0.5.1';
+export const VERSION = '1.0.0';
 
 function ensureToastRegistration(): void {
   // Best-effort self-heal for Windows toast registration.

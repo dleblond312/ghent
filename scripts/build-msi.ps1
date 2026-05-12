@@ -11,7 +11,7 @@
 # Pass -SignPfx to sign the MSI with a certificate.
 [CmdletBinding()]
 param(
-    [string]$Version = '0.2.0',
+    [string]$Version = '',
     [string]$NodeVersion = '22.11.0',  # current LTS
     [string]$SignPfx = '',
     [string]$SignPassword = '',
@@ -26,6 +26,13 @@ $StageDir     = Join-Path $BuildDir   'stage'
 $BundleDir    = Join-Path $BuildDir   'bundle'
 $InstallerDir = Join-Path $ProjectRoot 'installer'
 $DistDir      = Join-Path $ProjectRoot 'dist'
+
+if (-not $Version) {
+    $pkgJson = Join-Path $ProjectRoot 'package.json'
+    if (-not (Test-Path $pkgJson)) { throw "package.json not found at $pkgJson" }
+    $Version = (Get-Content $pkgJson -Raw | ConvertFrom-Json).version
+    if (-not $Version) { throw 'Could not determine version from package.json' }
+}
 
 function Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
