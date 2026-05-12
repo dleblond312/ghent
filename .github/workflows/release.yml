@@ -20,6 +20,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      WIX_EULA_ACCEPT: 'true'
     steps:
       - uses: actions/checkout@v4
 
