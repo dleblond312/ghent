@@ -7,3 +7,4 @@ dist/
 tmp/
 installer/AppFiles.wxs
 certs/
+.dotnet/
