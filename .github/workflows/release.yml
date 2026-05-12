@@ -1,0 +1,66 @@
+# Build and publish Ghent distribution artifacts on version tags.
+#
+# Usage:
+#   git tag v0.2.0
+#   git push origin v0.2.0
+#
+# Produces:
+#   - Ghent-<version>.msi   (Windows installer)
+#   - ghent-bundle.zip       (portable bundle: server.cjs + node_modules + assets)
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build bundle
+        run: npm run bundle
+
+      - name: Zip portable bundle
+        run: Compress-Archive -Path build/bundle/* -DestinationPath dist/ghent-bundle.zip
+        shell: pwsh
+
+      - name: Install WiX toolset
+        run: dotnet tool install --global wix
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v', ''
+          echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Build MSI
+        run: |
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-msi.ps1 -Version ${{ steps.version.outputs.VERSION }}
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/Ghent-${{ steps.version.outputs.VERSION }}.msi
+            dist/ghent-bundle.zip
