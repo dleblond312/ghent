@@ -1,6 +1,6 @@
-# Ghent: (GHE Notifications)
+# Ghent: GitHub + GHE Notifications
 
-Windows toast notifications when comments or reviews land on PRs you authored on GitHub Enterprise. Runs as a Windows scheduled task, polls the GHE API every 90 seconds, and fires a clickable toast that opens the comment in Edge.
+Windows toast notifications when comments or reviews land on PRs you authored on GitHub.com and GitHub Enterprise. Ghent supports multiple accounts at once, including mixed GH + GHE setups in a single running instance. It runs as a Windows scheduled task, polls each configured account every 90 seconds, and fires a clickable toast that opens the comment in Edge.
 
 **Stack:** Node 22, TypeScript (esbuild bundle), Express, `node-notifier` (SnoreToast), WiX 7 MSI.
 
@@ -14,8 +14,9 @@ Windows toast notifications when comments or reviews land on PRs you authored on
 
 ## What it does
 
-- Polls GHE for open PRs you authored and surfaces new comments, review comments, and reviews.
+- Polls every configured account (GitHub.com and/or GitHub Enterprise) for open PRs you authored and surfaces new comments, review comments, and reviews.
 - Also catches `@mention`s on PRs you didn't author.
+- Supports multiple accounts simultaneously from one config.
 - Skips your own comments.
 - Fires a clickable Windows toast — clicking opens the comment URL in Edge.
 - Per-PR cooldown (default 3 min) prevents spam when multiple comments land in quick succession on the same PR.
@@ -39,11 +40,12 @@ Or run directly:
 npx tsx src/server.ts
 ```
 
-Then open **http://localhost:9420/** and add your GHE account via the web UI.
+Then open **http://localhost:9420/** and add one or more accounts via the web UI (GitHub.com, GHE, or both).
 
 You need [gh CLI](https://cli.github.com) installed and authenticated:
 
 ```powershell
+gh auth login
 gh auth login --hostname your-company.ghe.com
 ```
 
@@ -61,6 +63,13 @@ Key fields:
 {
   "accounts": [
     {
+      "id": "github.com",
+      "label": "Personal GitHub",
+      "username": "your-gh-username",
+      "apiBase": "https://api.github.com",
+      "token": ""
+    },
+    {
       "id": "your-company.ghe.com",
       "label": "Work GHE",
       "username": "your-username",
@@ -75,7 +84,7 @@ Key fields:
 }
 ```
 
-Changes saved via the UI take effect immediately — poll interval changes restart the poller timer.
+Changes saved via the UI take effect immediately — poll interval changes restart the poller timer for all configured accounts.
 
 ---
 
@@ -196,7 +205,7 @@ Suppressed toasts (per-PR cooldown) are logged with `"suppressed":true` so no ac
 ### Poll mode (default)
 
 ```
-                    GHE API (v3/REST)
+                  GitHub API (GitHub.com + GHE)
                           ▲
                           │ GET /repos/:owner/:repo/pulls/comments
                           │ every 90s (configurable)
@@ -217,7 +226,7 @@ State persisted in `%LOCALAPPDATA%\Ghent\poller-state.json` — restarts resume 
 ### Webhook mode (real-time)
 
 ```
-GHE repo  ──webhook──>  https://YOUR-TUNNEL.devtunnels.ms/webhook
+GitHub repo (GH or GHE) ──webhook──>  https://YOUR-TUNNEL.devtunnels.ms/webhook
                                        │
                               devtunnel relay
                                        │
