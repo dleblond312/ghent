@@ -51,11 +51,14 @@ try {
             -Description 'Ghent - Windows toasts for new comments on PRs you authored.' `
             -Force | Out-Null
 
-        # Don't auto-start: the user needs to drop a config.json with their
-        # token first. The runtime will write a template README on first run
-        # and exit if creds are missing. Leave starting the task to the user
-        # or to next logon.
+        # Start the task immediately so the server is running when the
+        # config page opens. The server handles unconfigured state gracefully.
+        Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     }
+
+    # Give the server a moment to start, then open the config UI.
+    Start-Sleep -Seconds 2
+    Start-Process 'http://localhost:9420/'
 } catch {
     # Swallow errors so the install still succeeds. Diagnostics land in the
     # Windows Application event log via Write-Error.
