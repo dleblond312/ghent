@@ -486,9 +486,9 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   if (MODE === 'webhook') console.log(`[webhook] endpoint: http://localhost:${PORT}/webhook`);
   logEvent({ kind: 'startup', version: VERSION, mode: MODE, port: PORT, accounts: config.accounts.map(a => a.id) });
 
-  // First launch: auto-open the config UI so the user doesn't stare at a console.
-  if (!config.configured) {
-    console.log(`[server] No accounts configured — opening ${url} in your browser...`);
+  // Auto-open the config UI in the default browser on startup.
+  // Skip when running as a scheduled task (non-interactive / no console window).
+  if (process.stdout.isTTY) {
     import('node:child_process').then(({ exec }) => {
       exec(`start "" "${url}"`, (err) => {
         if (err) console.log('[server] Could not auto-open browser. Please open the URL above manually.');
