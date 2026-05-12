@@ -10,7 +10,7 @@ import { config, reloadConfig, appDataDir, type AccountConfig } from './config.j
 import { startPolling, stopPolling, getPollerStatus } from './poller.js';
 import { UI_HTML } from './ui.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.4.0';
 
 // ── Startup side effects (only when this file is the entry point) ─────────
 const _isEntryPoint = process.argv[1]?.replace(/\\/g, '/').endsWith('server.ts')
