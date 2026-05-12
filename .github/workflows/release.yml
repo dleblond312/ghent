@@ -38,7 +38,9 @@ jobs:
         run: npm run bundle
 
       - name: Zip portable bundle
-        run: Compress-Archive -Path build/bundle/* -DestinationPath dist/ghent-bundle.zip
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build/bundle/* -DestinationPath dist/ghent-bundle.zip
         shell: pwsh
 
       - name: Install WiX toolset
