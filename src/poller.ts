@@ -31,7 +31,7 @@ export function getPollerStatus(accountId: string): { running: boolean; lastPoll
 const GHE_SAFE_PER_HOUR = Math.floor(5000 * 0.80);
 const SEARCHES_PER_POLL  = 3;   // author + mentions + review-requested
 const CALLS_PER_PR       = 3;   // issue_comments + pull_comments + reviews
-function minSafeIntervalSec(activePrs: number): number {
+export function minSafeIntervalSec(activePrs: number): number {
   const calls = activePrs * CALLS_PER_PR + SEARCHES_PER_POLL;
   return Math.max(30, Math.ceil(calls * 3600 / GHE_SAFE_PER_HOUR));
 }
@@ -48,14 +48,14 @@ export function stopPolling(accountId?: string): void {
   }
 }
 
-interface PrState {
+export interface PrState {
   lastCommentId: number;
   lastReviewId: number;
   lastReviewCommentId: number;
   updatedAt?: string; // ISO `updated_at` from search — skip fetch if unchanged
 }
 
-interface PollerState {
+export interface PollerState {
   prs: Record<string, PrState>;            // my authored PRs
   reviewRequestedKeys: Record<string, true>; // keys where review was requested of me
   mentionsSince: string | null;
@@ -118,7 +118,7 @@ function statePath(accountId: string): string {
   return newPath;
 }
 
-function loadState(accountId: string): PollerState {
+export function loadState(accountId: string): PollerState {
   const p = statePath(accountId);
   const defaults: PollerState = { prs: {}, reviewRequestedKeys: {}, mentionsSince: null, seeded: false, lastPollTime: null };
   if (!existsSync(p)) return defaults;
@@ -126,11 +126,11 @@ function loadState(accountId: string): PollerState {
   catch (err) { console.warn(`[poll] could not parse state at ${p}:`, (err as Error).message); return defaults; }
 }
 
-function saveState(accountId: string, s: PollerState): void {
+export function saveState(accountId: string, s: PollerState): void {
   writeFileSync(statePath(accountId), JSON.stringify(s, null, 2));
 }
 
-async function pollOnce(account: AccountConfig, client: GheClient, state: PollerState): Promise<{ activePrs: number }> {
+export async function pollOnce(account: AccountConfig, client: GheClient, state: PollerState): Promise<{ activePrs: number }> {
   const seeding = !state.seeded;
   const ME = account.username;
   const flags = { ...DEFAULT_NOTIF_FLAGS, ...config.notifFlags };
@@ -273,10 +273,11 @@ async function pollOnce(account: AccountConfig, client: GheClient, state: Poller
 }
 
 // Per-PR last-toast timestamp (ms). In-memory only — resets on restart, which is fine.
-const _lastNotifAt = new Map<string, number>();
+// Exported for test cleanup.
+export const _lastNotifAt = new Map<string, number>();
 
 // Human-readable action string for each event kind.
-function kindAction(kind: EmitArgs['kind']): string {
+export function kindAction(kind: EmitArgs['kind']): string {
   switch (kind) {
     case 'approved':          return '\u2713 approved your PR';
     case 'changes_requested': return '\u2717 requested changes';
@@ -290,11 +291,11 @@ function kindAction(kind: EmitArgs['kind']): string {
   }
 }
 
-function renderTemplate(tmpl: string, vars: Record<string, string>): string {
+export function renderTemplate(tmpl: string, vars: Record<string, string>): string {
   return tmpl.replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? '');
 }
 
-function emit(flags: Record<string, boolean>, ev: EmitArgs): void {
+export function emit(flags: Record<string, boolean>, ev: EmitArgs): void {
   if (!flags[FLAG_MAP[ev.kind]]) return;
 
   const key = `${ev.repo}#${ev.num}`;
