@@ -1,11 +1,13 @@
 // Windows toast wrapper. Click opens the comment URL in the default browser.
 import { spawn } from 'node:child_process';
+import notifier from 'node-notifier';
 import { logEvent } from './logger.js';
 
 export interface NotifyArgs {
   title?: string;
   message?: string;
   url?: string;
+  forceFallback?: boolean;
 }
 
 function escapeXml(str: string): string {
@@ -30,6 +32,32 @@ function escapeXml(str: string): string {
  * is registered, so the click silently does nothing. The PowerShell WinRT
  * approach has no such limitation — Windows handles the launch directly.
  */
+function openInBrowser(url: string): void {
+  spawn('cmd.exe', ['/c', 'start', '', url], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  }).unref();
+}
+
+function showFallbackToast(title: string, message: string, url?: string): void {
+  const payload = {
+    title,
+    message,
+    appID: 'Ghent.1.0',
+    wait: !!url,
+  };
+
+  // node-notifier's click support is process-bound (unlike WinRT protocol toasts),
+  // but it's a reliable fallback when WinRT registration is broken.
+  if (url) {
+    notifier.once('click', () => openInBrowser(url));
+  }
+
+  notifier.notify(payload);
+  logEvent({ kind: 'toast_fallback_shown', title, message, url });
+}
+
 function showWinRTToast(title: string, message: string, url?: string): void {
   const safeTitle = escapeXml(title);
   const safeMsg   = escapeXml(message);
@@ -72,14 +100,37 @@ function showWinRTToast(title: string, message: string, url?: string): void {
   const child = spawn(
     'powershell.exe',
     ['-NonInteractive', '-WindowStyle', 'Hidden', '-NoProfile', '-EncodedCommand', encoded],
-    { detached: true, stdio: 'ignore', windowsHide: true }
+    { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }
   );
-  child.unref();
-  logEvent({ kind: 'toast_shown', title, message, url });
+
+  let stderr = '';
+  let stdout = '';
+  child.stderr?.on('data', chunk => { stderr += String(chunk); });
+  child.stdout?.on('data', chunk => { stdout += String(chunk); });
+
+  child.on('error', (err: Error) => {
+    logEvent({ kind: 'toast_error', title, message, url, error: err.message, stderr, stdout });
+    showFallbackToast(title, message, url);
+  });
+
+  child.on('close', (code: number | null) => {
+    if (code === 0) {
+      logEvent({ kind: 'toast_shown', title, message, url });
+      return;
+    }
+    logEvent({ kind: 'toast_error', title, message, url, exitCode: code, stderr, stdout });
+    showFallbackToast(title, message, url);
+  });
 }
 
-export function notify({ title, message, url }: NotifyArgs): void {
-  showWinRTToast(title || 'Ghent', message || '', url);
+export function notify({ title, message, url, forceFallback }: NotifyArgs): void {
+  const t = title || 'Ghent';
+  const m = message || '';
+  if (forceFallback) {
+    showFallbackToast(t, m, url);
+    return;
+  }
+  showWinRTToast(t, m, url);
 }
 
 // CLI smoke test: `npm run test-toast`

@@ -117,13 +117,11 @@ describe('notify()', () => {
     expect(decoded).toContain('Ghent');
   });
 
-  it('spawns detached and unrefs', () => {
+  it('spawns powershell with hidden window and piped stdio', () => {
     notify({ title: 'T' });
     const [, , opts] = mockSpawn.mock.calls[0];
-    expect(opts.detached).toBe(true);
-    expect(opts.stdio).toBe('ignore');
+    expect(opts.detached).toBeUndefined();
+    expect(opts.stdio).toEqual(['ignore', 'pipe', 'pipe']);
     expect(opts.windowsHide).toBe(true);
-    // unref was called
-    expect(mockSpawn.mock.results[0].value.unref).toHaveBeenCalled();
   });
 });

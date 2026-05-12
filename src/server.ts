@@ -1,9 +1,9 @@
 // Express server — serves the web config UI and handles GHE webhooks.
 import express, { type Request, type Response } from 'express';
 import crypto from 'node:crypto';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { notify } from './notifier.js';
 import { logEvent, patchConsole } from './logger.js';
 import { config, reloadConfig, appDataDir, type AccountConfig } from './config.js';
@@ -11,7 +11,47 @@ import { startPolling, stopPolling, getPollerStatus } from './poller.js';
 import { startTray, stopTray } from './tray.js';
 import { UI_HTML } from './ui.js';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.5.1';
+
+function ensureToastRegistration(): void {
+  // Best-effort self-heal for Windows toast registration.
+  // If the Start Menu shortcut/AUMID gets out of sync, toasts may silently fail.
+  // Running register-aumid.ps1 at startup keeps notification registration healthy.
+  const entryDir = dirname(resolve(process.argv[1] ?? ''));
+  const candidates = [
+    join(entryDir, 'scripts', 'register-aumid.ps1'),
+    join(entryDir, '..', 'scripts', 'register-aumid.ps1'),
+  ];
+  const scriptPath = candidates.find(p => existsSync(p));
+  if (!scriptPath) {
+    console.warn('[toast] register-aumid.ps1 not found; skipping AUMID self-heal');
+    return;
+  }
+  try {
+    execFileSync('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', scriptPath,
+    ], {
+      encoding: 'utf8',
+      timeout: 15000,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    logEvent({ kind: 'toast_registration_checked', scriptPath });
+  } catch (e: unknown) {
+    const err = e as { message?: string; stderr?: string; stdout?: string };
+    const msg = err.message || String(e);
+    console.warn('[toast] AUMID self-heal failed:', msg);
+    logEvent({
+      kind: 'toast_registration_error',
+      error: msg,
+      stderr: err.stderr || '',
+      stdout: err.stdout || '',
+      scriptPath
+    });
+  }
+}
 
 // ── Startup side effects (only when this file is the entry point) ─────────
 const _isEntryPoint = process.argv[1]?.replace(/\\/g, '/').endsWith('server.ts')
@@ -21,6 +61,9 @@ const _isEntryPoint = process.argv[1]?.replace(/\\/g, '/').endsWith('server.ts')
 if (_isEntryPoint) {
   // Timestamps on every log line from the start.
   patchConsole();
+
+  // Ensure Windows toast registration exists before first notification.
+  ensureToastRegistration();
 
   const MODE = config.mode;
   // Start a poller for every enabled configured account.
@@ -337,12 +380,16 @@ app.get('/health', (_req: Request, res: Response) => {
 app.post('/api/test-notification', (_req: Request, res: Response) => {
   const account = config.accounts[0];
   try {
+    logEvent({ kind: 'test_notification_requested' });
     notify({
       title: 'Ghent',
       message: account
         ? `Test notification - watching ${account.id} as ${account.username}`
         : 'Test notification - no accounts configured yet',
       url: `http://localhost:${config.port}/`,
+      // Test button should produce an obvious local signal even when WinRT
+      // registration drifts. Real PR notifications still use WinRT first.
+      forceFallback: true,
     });
     res.json({ ok: true });
   } catch (err: unknown) {
@@ -503,14 +550,11 @@ if (_isEntryPoint) {
 
   server.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
-      // Another instance is already running.  Open the config page in the
-      // browser so clicking the Start Menu entry still does the right thing,
-      // then exit cleanly (no crash, no duplicate tray icon).
-      console.log(`[server] port ${PORT} already in use — redirecting to existing instance`);
-      logEvent({ kind: 'startup_redirect', port: PORT });
-      spawn('cmd.exe', ['/c', 'start', '', `http://localhost:${PORT}/`], {
-        detached: true, stdio: 'ignore', windowsHide: true,
-      }).unref();
+      // Another instance is already running. Exit cleanly so concurrent
+      // launch paths (Start Menu + scheduled task) do not open duplicate
+      // browser windows. The launcher script is the single owner of opening UI.
+      console.log(`[server] port ${PORT} already in use — instance already running`);
+      logEvent({ kind: 'startup_already_running', port: PORT });
       process.exit(0);
     }
     console.error('[server] listen error:', err.message);
