@@ -1,4 +1,4 @@
-# Ghent
+# Ghent: (GHE Notifications)
 
 Windows toast notifications when comments or reviews land on PRs you authored on GitHub Enterprise. Runs as a Windows scheduled task, polls the GHE API every 90 seconds, and fires a clickable toast that opens the comment in Edge.
 
@@ -163,127 +163,37 @@ Suppressed toasts (per-PR cooldown) are logged with `"suppressed":true` so no ac
 | No notifications for a PR | Check `events.jsonl` — if events appear with `"suppressed":true`, the per-PR cooldown is active. |
 | Poll never runs | Check `task.log` for errors. Common: gh CLI not authenticated (`gh auth login --hostname <host>`). |
 | Config lost after save | Check `task.log` for `[config] could not read existing config` warnings — indicates corrupt config.json. |
-
-
-> GHE doesn't expose a true "all repos I can access" webhook for regular users. Per-repo is the practical equivalent. If you have `admin:org_hook` on your org you can switch to `REGISTER_SCOPE=org` + `REGISTER_ORG=your-org` for one hook covering everything.
-
-### 6. Register the webhooks
-
-```powershell
-npm run register
-```
-
-Idempotent — re-running updates existing hooks rather than duplicating.
-
-### 7. Smoke test the toast
-
-```powershell
-npm run test-toast
-```
-
-You should see a Windows toast. Click it; it should open https://your-company.ghe.com.
-
-### 8. Start the listener
-
-```powershell
-npm start
-```
-
-Trigger a real test by commenting on one of your open PRs from another account. Within ~1s you should get a toast.
-
----
-
-## Production: auto-start at logon
-
-```powershell
-pwsh ./scripts/install-task.ps1
-Start-ScheduledTask -TaskName Ghent
-```
-
-Logs go to `%LOCALAPPDATA%\Ghent\task.log`. Remove with:
-
-```powershell
-pwsh ./scripts/install-task.ps1 -Remove
-```
-
-> The DevTunnel itself is NOT auto-started by this task. If you want the tunnel to come up at logon too, register a separate scheduled task that runs `devtunnel host YOUR-TUNNEL-NAME -p 51847`.
-
----
-
-## Polling fallback
-
-If the tunnel is offline or you want zero infra:
-
-```env
-MODE=poll
-POLL_INTERVAL_SEC=60
-```
-
-`npm start` will then ignore the webhook path and poll the GHE API every minute. State is persisted in `%LOCALAPPDATA%\Ghent\poller-state.json` (so a restart doesn't replay every comment as new). The first run after deleting state seeds without toasting.
-
----
-
-## Event log format
-
-`%LOCALAPPDATA%\Ghent\events.jsonl` — append-only, one JSON object per line:
-
-```json
-{"ts":"2026-05-09T18:42:11.123Z","delivery":"abc-123","event":"issue_comment","kind":"issue_comment","reason":"my-pr","repo":"org/my-project","prNumber":42,"prTitle":"Add foo","commenter":"someone","body":"LGTM with one nit","url":"https://your-company.ghe.com/org/my-project/pull/42#issuecomment-9999"}
-```
-
-Skipped events are also logged (`kind:"skip"`) so you can audit filtering.
-
-To consume from another tool, tail the file or read it on a timer. It's safe to delete old lines (truncate) while the notifier runs — Node opens it in append mode each write.
-
----
-
-## Log files & diagnostics
-
-All activity is written to local files under `%LOCALAPPDATA%\Ghent\`. Nothing is ever sent anywhere automatically — if you need help debugging a crash, you share the files yourself ("sneaker mail").
-
-| File | Contents |
-|---|---|
-| `events.jsonl` | Structured event log: startup, shutdown, install, uninstall, config changes, account changes, PR notifications, crashes |
-| `task.log` | Raw stdout/stderr from the server process (timestamped) |
-
-Each file rotates at 5 MB, keeping one previous generation (`.old`). Disk usage is bounded to ~20 MB total.
-
-### Opening the logs
-
-```powershell
-# Explorer
-explorer $env:LOCALAPPDATA\Ghent
-
-# Quick tail in PowerShell
-Get-Content $env:LOCALAPPDATA\Ghent\events.jsonl -Tail 50
-Get-Content $env:LOCALAPPDATA\Ghent\task.log -Tail 100
-
-# Pretty-print the last event
-Get-Content $env:LOCALAPPDATA\Ghent\events.jsonl -Tail 1 | ConvertFrom-Json
-```
-
-### Sending logs when reporting a bug
-
-1. Open `%LOCALAPPDATA%\Ghent\` in Explorer.
-2. Zip `events.jsonl` and `task.log` (include `.old` backups if present).
-3. Attach the zip to your GitHub issue.
-
----
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| GHE shows webhook delivery failing with 401 | `WEBHOOK_SECRET` in `.env` doesn't match what was registered. Re-run `npm run register`. |
-| GHE delivery times out | Tunnel is down or `PORT` doesn't match `devtunnel host -p`. Check `https://YOUR-TUNNEL.devtunnels.ms/health` returns JSON. |
-| Toast doesn't appear | Run `npm run test-toast`. If it fails, check Windows Focus Assist isn't suppressing notifications. |
-| `npm run test-toast` prints `DisabledForUser` | Open Settings → System → Notifications → scroll to **SnoreToast** → turn it **On**. SnoreToast is the helper exe `node-notifier` ships; Windows installs it on first run, then defaults it to disabled. |
-| GHE rejects hook creation with 404 | Token is missing `admin:repo_hook` scope, or you don't have admin on that repo. |
-| Lots of noise from old comments | Delete `%LOCALAPPDATA%\Ghent\poller-state.json` (poll mode only) — next run reseeds without toasting. |
+| Lots of noise from old comments | Delete `%LOCALAPPDATA%\Ghent\poller-state.json` — next run reseeds without toasting. |
+| GHE shows webhook delivery failing with 401 | *(webhook mode)* `webhookSecret` in config doesn't match what was registered. Re-run `npm run register`. |
+| GHE delivery times out | *(webhook mode)* Tunnel is down or port doesn't match `devtunnel host -p`. |
+| GHE rejects hook creation with 404 | *(webhook mode)* Token is missing `admin:repo_hook` scope, or you don't have admin on that repo. |
 
 ---
 
 ## Architecture
+
+### Poll mode (default)
+
+```
+                    GHE API (v3/REST)
+                          ▲
+                          │ GET /repos/:owner/:repo/pulls/comments
+                          │ every 90s (configurable)
+                          │
+                   ┌──────┴──────┐
+                   │  poller.ts  │
+                   │  (per acct) │
+                   └──────┬──────┘
+                          │
+             ┌────────────┴────────────┐
+             ▼                         ▼
+      notifier.ts                  logger.ts
+     (WinRT toast)     (%LOCALAPPDATA%\Ghent\events.jsonl)
+```
+
+State persisted in `%LOCALAPPDATA%\Ghent\poller-state.json` — restarts resume from last poll, no replays.
+
+### Webhook mode (real-time)
 
 ```
 GHE repo  ──webhook──>  https://YOUR-TUNNEL.devtunnels.ms/webhook
@@ -291,10 +201,12 @@ GHE repo  ──webhook──>  https://YOUR-TUNNEL.devtunnels.ms/webhook
                               devtunnel relay
                                        │
                                        ▼
-                          localhost:51847  (express)
+                          localhost:9420  (express)
                                        │
                           ┌────────────┴────────────┐
                           ▼                         ▼
-                   notifier.js                  logger.js
-                  (toast + open)    (%LOCALAPPDATA%\Ghent\events.jsonl)
+                   notifier.ts                  logger.ts
+                  (WinRT toast)     (%LOCALAPPDATA%\Ghent\events.jsonl)
 ```
+
+Requires a public endpoint (DevTunnel) and per-repo webhook registration. Set `"mode": "webhook"` in config.

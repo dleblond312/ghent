@@ -21,7 +21,7 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      WIX_EULA_ACCEPT: 'true'
+      WIX_EULA_ACCEPT: 'YES'
     steps:
       - uses: actions/checkout@v4
 
