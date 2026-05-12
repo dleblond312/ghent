@@ -1,0 +1,8 @@
+node_modules/
+.env
+logs/
+*.log
+build/
+dist/
+tmp/
+installer/AppFiles.wxs

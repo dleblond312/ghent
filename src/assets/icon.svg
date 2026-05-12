@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Transparent-background bell icon for Ghent (GHE PR Notifier) -->
+  <!-- Very subtle dark fill — containment hint on light/mixed backgrounds -->
+  <circle cx="32" cy="32" r="30" fill="#0d1117" fill-opacity="0.28"/>
+  <!-- White contrast ring outline -->
+  <circle cx="32" cy="32" r="30" fill="none" stroke="white" stroke-opacity="0.88" stroke-width="2.5"/>
+  <!-- Bell — white, centered -->
+  <!-- Stem/handle -->
+  <rect x="29.5" y="7" width="5" height="7" rx="2.5" fill="white"/>
+  <!-- Dome body -->
+  <path d="M32,13 C23,13 14,20 14,30 L14,41 L50,41 L50,30 C50,20 41,13 32,13 Z" fill="white"/>
+  <!-- Rim bar -->
+  <rect x="10" y="41" width="44" height="6" rx="3" fill="white"/>
+  <!-- Clapper -->
+  <circle cx="32" cy="52.5" r="5" fill="white"/>
+  <!-- Cat tail — white, curling out from right of clapper -->
+  <path d="M36,56 C50,62 60,51 56,40 C53,33 46,37 49,44" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Notification dot — green, top-right -->
+  <circle cx="46" cy="15" r="7" fill="#238636"/>
+  <circle cx="46" cy="15" r="5.5" fill="#3fb950"/>
+</svg>

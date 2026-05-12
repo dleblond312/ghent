@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX 4 source for the Ghent installer.
+
+  Built via:  scripts/build-msi.ps1
+  Output:    dist/Ghent-<version>.msi
+
+  Layout installed to "C:\Program Files\Ghent\":
+    node.exe                  (portable Node 22 runtime)
+    server.cjs                (esbuild bundle)
+    node_modules\node-notifier\... (kept as files)
+    snoretoast\snoretoast-x64.exe
+    scripts\install-task-msi.ps1, uninstall-task-msi.ps1, register-aumid.ps1, run-hidden-msi.vbs
+
+  Per-user state under "%LOCALAPPDATA%\Ghent\":
+    config.json (template written on first run if missing)
+    events.jsonl, poller-state.json, task.log
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="Ghent"
+      Manufacturer="Ghent Contributors"
+      Version="$(var.ProductVersion)"
+      UpgradeCode="A6F3D2B1-9E84-4C77-9B3D-8C4F9E2A5B17"
+      Compressed="yes"
+      Scope="perUser"
+      InstallerVersion="500">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- Custom icon: embedded in MSI, used by Add/Remove Programs and shortcuts.
+         IconFile is passed as -d "IconFile=<abs-path>" by build-msi.ps1. -->
+    <Icon Id="GhentIcon" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="GhentIcon" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="UserProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Ghent" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Start Menu shortcut placed directly in ProgramMenuFolder (no subfolder) -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="*">
+        <Shortcut Id="StartMenuShortcutGhent"
+                  Name="Ghent"
+                  Description="GHE Pull Request Notifier"
+                  Target="[INSTALLFOLDER]node.exe"
+                  Arguments="&quot;[INSTALLFOLDER]server.cjs&quot;"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="GhentIcon" />
+        <!-- WiX requires a KeyPath registry value when creating shortcuts
+             so the installer knows the component is installed. -->
+        <RegistryValue Root="HKCU"
+                       Key="Software\Ghent\StartMenu"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Ghent" Level="1">
+      <!-- Auto-harvest the entire stage directory. WiX walks the tree and
+           generates Components and Files for everything under it. -->
+      <Files Include="$(var.StageDir)\**" />
+      <ComponentRef Id="ScheduledTaskMarker" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <!-- Marker component so we have an install anchor outside the harvested
+         file set. The registry entry also lets us detect prior installs. -->
+    <Component Id="ScheduledTaskMarker" Directory="INSTALLFOLDER" Guid="*">
+      <RegistryValue Root="HKCU"
+                     Key="Software\Ghent"
+                     Name="Installed"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <!-- Custom action: register the scheduled task + AUMID after install.
+         The trailing dot on [INSTALLFOLDER]. is required: INSTALLFOLDER ends
+         in a backslash, and the literal `\"` at the end of the quoted arg
+         would otherwise be parsed as an escaped quote, mangling the args. -->
+    <CustomAction Id="RegisterTask"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]scripts\install-task-msi.ps1&quot; -InstallRoot &quot;[INSTALLFOLDER].&quot;"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <CustomAction Id="UnregisterTask"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]scripts\uninstall-task-msi.ps1&quot;"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="RegisterTask"   After="InstallFiles" Condition="NOT Installed" />
+      <Custom Action="UnregisterTask" Before="RemoveFiles" Condition="(REMOVE=&quot;ALL&quot;) AND (NOT UPGRADINGPRODUCTCODE)" />
+    </InstallExecuteSequence>
+
+  </Package>
+</Wix>
