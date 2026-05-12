@@ -160,7 +160,7 @@ export function loadConfig(): Config {
   const isConfigured = accounts.length > 0;
   if (!isConfigured) {
     const path = writeTemplateIfMissing();
-    console.log(`[config] unconfigured. Open http://localhost:9420/ to set up, or edit ${path} and restart.`);
+    console.log(`[config] Welcome to Ghent! Add a GHE account to get started.`);
   }
 
   const here = dirname(resolve(process.argv[1] || process.cwd()));
