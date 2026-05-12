@@ -147,7 +147,7 @@ if ($SignPfx -and (Test-Path $SignPfx)) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
         Sort-Object FullName -Descending | Select-Object -First 1
     if (-not $signtool) {
-        Write-Warning 'signtool.exe not found — skipping signing. Install Windows SDK.'
+        Write-Warning 'signtool.exe not found - skipping signing. Install Windows SDK.'
     } else {
         $signArgs = @('sign', '/fd', 'SHA256', '/f', $SignPfx, '/t', 'http://timestamp.digicert.com')
         if ($SignPassword) { $signArgs += '/p'; $signArgs += $SignPassword }
@@ -157,9 +157,10 @@ if ($SignPfx -and (Test-Path $SignPfx)) {
         Write-Host "   Signed: $msiOut"
     }
 } elseif ($SignPfx) {
-    Write-Warning "PFX not found at $SignPfx — skipping signing."
+    Write-Warning "PFX not found at $SignPfx - skipping signing."
 }
 
 $msiSize = (Get-Item $msiOut).Length
 Write-Host ''
-Step ("Built: $msiOut ({0:N1} MB)" -f ($msiSize / 1MB))
+$sizeMB = '{0:N1}' -f ($msiSize / 1MB)
+Step "Built: $msiOut - $sizeMB MB"
