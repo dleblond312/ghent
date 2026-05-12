@@ -8,10 +8,13 @@
 #   5. wix build -> dist/Ghent-<version>.msi  (auto-harvests stage tree)
 #
 # Idempotent. Run with -Clean to nuke build/ first.
+# Pass -SignPfx to sign the MSI with a certificate.
 [CmdletBinding()]
 param(
     [string]$Version = '0.2.0',
     [string]$NodeVersion = '22.11.0',  # current LTS
+    [string]$SignPfx = '',
+    [string]$SignPassword = '',
     [switch]$Clean
 )
 
@@ -135,6 +138,27 @@ $iconFile = Join-Path $PSScriptRoot '..\src\assets\icon.ico'
     -d "IconFile=$iconFile" `
     -out $msiOut
 if ($LASTEXITCODE -ne 0) { throw 'wix build failed' }
+
+# ---------------------------------------------------------------------------
+# 6. Sign MSI (optional)
+# ---------------------------------------------------------------------------
+if ($SignPfx -and (Test-Path $SignPfx)) {
+    Step 'Signing MSI'
+    $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending | Select-Object -First 1
+    if (-not $signtool) {
+        Write-Warning 'signtool.exe not found — skipping signing. Install Windows SDK.'
+    } else {
+        $signArgs = @('sign', '/fd', 'SHA256', '/f', $SignPfx, '/t', 'http://timestamp.digicert.com')
+        if ($SignPassword) { $signArgs += '/p'; $signArgs += $SignPassword }
+        $signArgs += $msiOut
+        & $signtool.FullName @signArgs
+        if ($LASTEXITCODE -ne 0) { throw 'signtool failed' }
+        Write-Host "   Signed: $msiOut"
+    }
+} elseif ($SignPfx) {
+    Write-Warning "PFX not found at $SignPfx — skipping signing."
+}
 
 $msiSize = (Get-Item $msiOut).Length
 Write-Host ''
